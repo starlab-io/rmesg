@@ -13,25 +13,9 @@ use nonblock::NonBlockingReader;
 use regex::Regex;
 use std::fs as stdfs;
 
-#[cfg(feature = "sync")]
 use std::io as stdio;
-#[cfg(feature = "sync")]
 use std::io::BufRead;
-#[cfg(feature = "sync")]
 use std::iter::Iterator;
-
-#[cfg(feature = "async")]
-use core::pin::Pin;
-#[cfg(feature = "async")]
-use futures::stream::Stream;
-#[cfg(feature = "async")]
-use futures::task::{Context, Poll};
-#[cfg(feature = "async")]
-use tokio::fs as tokiofs;
-#[cfg(feature = "async")]
-use tokio::io as tokioio;
-#[cfg(feature = "async")]
-use tokio::io::AsyncBufReadExt;
 
 const DEV_KMSG_PATH: &str = "/dev/kmsg";
 lazy_static! {
@@ -57,13 +41,11 @@ lazy_static! {
 ///
 /// Implements the synchronous std::iter::Iterator trait
 ///
-#[cfg(feature = "sync")]
 pub struct KMsgEntriesIter {
     raw: bool,
     lines_iter: stdio::Lines<stdio::BufReader<stdfs::File>>,
 }
 
-#[cfg(feature = "sync")]
 impl KMsgEntriesIter {
     /// Create a new KMsgEntries with two specific options
     /// `file_override`: When `Some`, overrides the path from where to read the kernel logs
@@ -95,7 +77,6 @@ impl KMsgEntriesIter {
 }
 
 /// Trait to iterate over lines of the kernel log buffer.
-#[cfg(feature = "sync")]
 impl Iterator for KMsgEntriesIter {
     type Item = Result<Entry, RMesgError>;
 
@@ -121,97 +102,6 @@ impl Iterator for KMsgEntriesIter {
                 } else {
                     Some(entry_from_line(&line).map_err(|e| e.into()))
                 }
-            }
-        }
-    }
-}
-
-/// While reading the kernel log buffer is very useful in and of itself (especially when running the CLI),
-/// a lot more value is unlocked when it can be tailed line-by-line.
-///
-/// This struct provides the facilities to do that. It implements an iterator to easily iterate
-/// indefinitely over the lines.
-///
-/// Implements the tokio::stream::Stream trait
-///
-#[cfg(feature = "async")]
-pub struct KMsgEntriesStream {
-    raw: bool,
-
-    lines_stream: Pin<Box<tokioio::Lines<tokioio::BufReader<tokiofs::File>>>>,
-}
-
-#[cfg(feature = "async")]
-impl KMsgEntriesStream {
-    /// Create a new KMsgEntries with two specific options
-    /// `file_override`: When `Some`, overrides the path from where to read the kernel logs
-    /// `raw: bool` When set, does not parse the message and instead sets the entire log entry in the "message" field
-    pub async fn with_options(
-        file_override: Option<String>,
-        raw: bool,
-    ) -> Result<Self, RMesgError> {
-        let path = file_override.as_deref().unwrap_or(DEV_KMSG_PATH);
-
-        let file = match tokiofs::File::open(path).await {
-            Ok(fc) => fc,
-            Err(e) => {
-                if e.raw_os_error() == Some(libc::EPERM) {
-                    return Err(RMesgError::OperationNotPermitted(format!(
-                        "Open File {}",
-                        path
-                    )));
-                } else {
-                    return Err(RMesgError::DevKMsgFileOpenError(format!(
-                        "Unable to open file {}: {}",
-                        path, e
-                    )));
-                }
-            }
-        };
-
-        // try to read from file
-        let mut lines_stream = Box::pin(tokioio::BufReader::new(file).lines());
-
-        //read a line
-        if let Err(e) = lines_stream.next_line().await {
-            return Err(RMesgError::DevKMsgFileOpenError(format!(
-                "Unable to read from file {}: {}",
-                path, e
-            )));
-        }
-
-        // create a new lines_stream with a new file
-        let lines_stream =
-            Box::pin(tokioio::BufReader::new(tokiofs::File::open(path).await?).lines());
-
-        Ok(Self { raw, lines_stream })
-    }
-}
-
-/// Trait to iterate over lines of the kernel log buffer.
-#[cfg(feature = "async")]
-impl Stream for KMsgEntriesStream {
-    type Item = Result<Entry, RMesgError>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.lines_stream.as_mut().poll_next_line(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e.into()))),
-            Poll::Ready(Ok(None)) => Poll::Ready(None),
-            Poll::Ready(Ok(Some(line))) => {
-                let value = if self.raw {
-                    Some(Ok(Entry {
-                        facility: None,
-                        level: None,
-                        timestamp_from_system_start: None,
-                        sequence_num: None,
-                        message: line,
-                    }))
-                } else {
-                    Some(entry_from_line(&line).map_err(|e| e.into()))
-                };
-
-                Poll::Ready(value)
             }
         }
     }
@@ -336,7 +226,6 @@ mod test {
         assert!(!entries.unwrap().is_empty(), "Should have non-empty logs");
     }
 
-    #[cfg(feature = "sync")]
     #[test]
     fn test_iterator() {
         // uncomment below if you want to be extra-sure
@@ -352,30 +241,6 @@ mod test {
         // Read 10 lines and quit
         for (count, entry) in iterator.enumerate() {
             assert!(entry.is_ok());
-            if count > 10 {
-                break;
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn test_stream() {
-        // uncomment below if you want to be extra-sure
-        //let enable_timestamp_result = kernel_log_timestamps_enable(true);
-        //assert!(enable_timestamp_result.is_ok());
-
-        // Don't clear the buffer. Poll every second.
-        let stream_result = KMsgEntriesStream::with_options(None, false).await;
-        //assert!(stream_result.is_ok());
-
-        let mut stream = stream_result.unwrap();
-
-        // Read 10 lines and quit
-        let mut count: u32 = 0;
-        while let Some(entry) = stream.next().await {
-            assert!(entry.is_ok());
-            count += 1;
             if count > 10 {
                 break;
             }

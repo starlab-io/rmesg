@@ -19,20 +19,7 @@ use std::fs;
 use std::time::{Duration, SystemTime};
 use strum_macros::Display;
 
-#[cfg(feature = "async")]
-use core::future::Future;
-#[cfg(feature = "async")]
-use core::pin::Pin;
-#[cfg(feature = "async")]
-use futures::stream::Stream;
-#[cfg(feature = "async")]
-use futures::task::{Context, Poll};
-#[cfg(feature = "async")]
-use tokio::time as tokiotime;
-
-#[cfg(feature = "sync")]
 use std::iter::Iterator;
-#[cfg(feature = "sync")]
 use std::thread;
 
 #[cfg(target_os = "linux")]
@@ -115,8 +102,6 @@ pub struct KLogEntries {
     sleep_interval: Duration, // Just slightly longer than poll interval so the check passes
     last_poll: SystemTime,
 
-    #[cfg(feature = "async")]
-    sleep_future: Option<Pin<Box<tokiotime::Sleep>>>,
 }
 
 impl KLogEntries {
@@ -157,9 +142,6 @@ impl KLogEntries {
             last_poll,
             clear,
             last_timestamp: None,
-
-            #[cfg(feature = "async")]
-            sleep_future: None,
         })
     }
 
@@ -211,7 +193,6 @@ impl KLogEntries {
 }
 
 /// Trait to iterate over lines of the kernel log buffer.
-#[cfg(feature = "sync")]
 impl Iterator for KLogEntries {
     type Item = Result<Entry, RMesgError>;
 
@@ -239,51 +220,6 @@ impl Iterator for KLogEntries {
         }
 
         Some(Ok(self.entries.remove(0)))
-    }
-}
-
-/// Trait to iterate over lines of the kernel log buffer.
-#[cfg(feature = "async")]
-impl Stream for KLogEntries {
-    type Item = Result<Entry, RMesgError>;
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(mut sf) = self.sleep_future.take() {
-            match Future::poll(sf.as_mut(), cx) {
-                // still sleeping? Go back to sleep.
-                Poll::Pending => {
-                    // put the future back in
-                    self.sleep_future = Some(sf);
-                    return Poll::Pending;
-                }
-
-                // Not sleeping?
-                Poll::Ready(()) => {}
-            }
-        }
-
-        // entries empty?
-        while self.entries.is_empty() {
-            let elapsed = match self.last_poll.elapsed() {
-                Ok(duration) => duration,
-                Err(e) => return Poll::Ready(Some(Err(RMesgError::UnableToObtainElapsedTime(e)))),
-            };
-
-            // Did enough time pass since last poll? If so try to poll
-            if elapsed >= self.poll_interval {
-                if let Err(e) = self.poll() {
-                    return Poll::Ready(Some(Err(e)));
-                }
-            } else {
-                let sf = tokiotime::sleep(self.sleep_interval);
-                let mut pinned_sf = Box::pin(sf);
-                if Future::poll(pinned_sf.as_mut(), cx).is_pending() {
-                    self.sleep_future = Some(pinned_sf);
-                    return Poll::Pending;
-                }
-            }
-        }
-
-        Poll::Ready(Some(Ok(self.entries.remove(0))))
     }
 }
 

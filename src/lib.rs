@@ -10,15 +10,6 @@ pub mod kmsgfile;
 #[cfg(feature = "sync")]
 use std::iter::Iterator;
 
-#[cfg(feature = "async")]
-use core::pin::Pin;
-#[cfg(feature = "async")]
-use futures::stream::Stream;
-#[cfg(feature = "async")]
-use futures::task::{Context, Poll};
-#[cfg(feature = "async")]
-use pin_project::pin_project;
-
 #[derive(Clone, Copy, Debug)]
 pub enum Backend {
     Default,
@@ -26,35 +17,16 @@ pub enum Backend {
     DevKMsg,
 }
 
-#[cfg(feature = "sync")]
 pub enum EntriesIterator {
     KLogCtl(klogctl::KLogEntries),
     DevKMsg(kmsgfile::KMsgEntriesIter),
 }
-#[cfg(feature = "sync")]
 impl Iterator for EntriesIterator {
     type Item = Result<entry::Entry, error::RMesgError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::KLogCtl(k) => k.next(),
             Self::DevKMsg(d) => d.next(),
-        }
-    }
-}
-
-#[pin_project(project = EntriesStreamPinnedProjection)]
-#[cfg(feature = "async")]
-pub enum EntriesStream {
-    KLogCtl(#[pin] klogctl::KLogEntries),
-    DevKMsg(#[pin] kmsgfile::KMsgEntriesStream),
-}
-#[cfg(feature = "async")]
-impl Stream for EntriesStream {
-    type Item = Result<entry::Entry, error::RMesgError>;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.project() {
-            EntriesStreamPinnedProjection::KLogCtl(k) => k.poll_next(cx),
-            EntriesStreamPinnedProjection::DevKMsg(d) => d.poll_next(cx),
         }
     }
 }
@@ -95,7 +67,6 @@ pub fn logs_raw(b: Backend, clear: bool) -> Result<String, error::RMesgError> {
     }
 }
 
-#[cfg(feature = "sync")]
 pub fn logs_iter(b: Backend, clear: bool, raw: bool) -> Result<EntriesIterator, error::RMesgError> {
     match b {
         Backend::Default => match kmsgfile::KMsgEntriesIter::with_options(None, raw) {
@@ -116,35 +87,6 @@ pub fn logs_iter(b: Backend, clear: bool, raw: bool) -> Result<EntriesIterator, 
         )),
         Backend::DevKMsg => Ok(EntriesIterator::DevKMsg(
             kmsgfile::KMsgEntriesIter::with_options(None, raw)?,
-        )),
-    }
-}
-
-#[cfg(feature = "async")]
-pub async fn logs_stream(
-    b: Backend,
-    clear: bool,
-    raw: bool,
-) -> Result<EntriesStream, error::RMesgError> {
-    match b {
-        Backend::Default => match kmsgfile::KMsgEntriesStream::with_options(None, raw).await {
-            Ok(e) => Ok(EntriesStream::DevKMsg(e)),
-            Err(error::RMesgError::DevKMsgFileOpenError(s)) => {
-                eprintln!(
-                    "Falling back from device file to klogctl syscall due to error: {}",
-                    s
-                );
-                Ok(EntriesStream::KLogCtl(
-                    klog_entries_only_if_timestamp_enabled(clear)?,
-                ))
-            }
-            Err(e) => Err(e),
-        },
-        Backend::KLogCtl => Ok(EntriesStream::KLogCtl(
-            klog_entries_only_if_timestamp_enabled(clear)?,
-        )),
-        Backend::DevKMsg => Ok(EntriesStream::DevKMsg(
-            kmsgfile::KMsgEntriesStream::with_options(None, raw).await?,
         )),
     }
 }
@@ -172,8 +114,6 @@ fn klog_entries_only_if_timestamp_enabled(
 #[cfg(all(test, target_os = "linux"))]
 mod test {
     use super::*;
-    #[cfg(feature = "async")]
-    use tokio_stream::StreamExt;
 
     #[test]
     fn test_log_entries() {
@@ -182,7 +122,6 @@ mod test {
         assert!(!entries.unwrap().is_empty(), "Should have non-empty logs");
     }
 
-    #[cfg(feature = "sync")]
     #[test]
     fn test_iterator() {
         // uncomment below if you want to be extra-sure
@@ -198,30 +137,6 @@ mod test {
         // Read 10 lines and quit
         for (count, entry) in iterator.enumerate() {
             assert!(entry.is_ok());
-            if count > 10 {
-                break;
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn test_stream() {
-        // uncomment below if you want to be extra-sure
-        //let enable_timestamp_result = kernel_log_timestamps_enable(true);
-        //assert!(enable_timestamp_result.is_ok());
-
-        // Don't clear the buffer. Poll every second.
-        let stream_result = logs_stream(Backend::Default, false, false).await;
-        assert!(stream_result.is_ok());
-
-        let mut stream = stream_result.unwrap();
-
-        // Read 10 lines and quit
-        let mut count: u32 = 0;
-        while let Some(entry) = stream.next().await {
-            assert!(entry.is_ok());
-            count += 1;
             if count > 10 {
                 break;
             }

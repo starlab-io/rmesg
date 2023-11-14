@@ -7,56 +7,25 @@ license = "Apache-2.0"
 categories = ["os", "command-line-utilities"]
 keywords = ["dmesg", "klogctl", "printk", "syslog"]
 readme = "README.md"
-repository = "https://github.com/archisgore/rmesg"
-description = """This is a fully Rust-based implementation of the popular dmesg Linux utility, giving
- programmatic access to the kernel log buffer."""
-
-[[bin]]
-name = "rmesg"
-path = "src/main.rs"
-required-features = ["async"]
+description = """This is a starlab customized fork of a Rust-based implementation of the popular
+dmesg Linux utility, giving programmatic access to the kernel log buffer."""
 
 [lib]
 name = "rmesg"
 path = "src/lib.rs"
 
-[features]
-default = ["async"]
-# The default set of optional packages. Most people will want to use these
-# packages, but they are strictly optional. Note that `session` is not a package
-# but rather another feature listed in this manifest.
-sync = []
-async = ["futures", "futures-util", "tokio", "pin-project"]
-extra-traits = ["serde"]
-
 [dependencies]
-libc = "0.2.112"
+libc = "0.2"
 cfg-if = "1.0.0"
-enum-display-derive = "0.1.1"
-errno = "0.2.8"
-clap = "3.0.14"
+errno = "0.3.3"
 lazy_static = "1.4.0"
 regex = "1.5.4"
-strum = "0.24.0"
-strum_macros = "0.24.0"
-num = "0.4.0"
-num-traits = "0.2.14"
-num-derive = "0.3.3"
-nonblock = "0.1.0"
-
-# Optional - on extra-traits
-serde = { version = "1.0.132", features = ["derive"], optional = true }
-
-# Optional - only enabled through the "async" feature
-futures = { version = "0.3.19", optional = true }
-futures-util = { version = "0.3.19", optional = true }
-tokio = { version = "1.15.0", features = ["rt", "fs", "io-util", "macros", "time"], optional = true }
-pin-project = {version = "1.0.8", optional = true }
-
-[dev-dependencies]
-tokio-stream = { version = "0.1.8" }
-rand = "0.8.4"
-criterion = { version = "0.3.5", features = ["async_tokio"]}
+strum = "0.25"
+strum_macros = "0.25"
+num = "0.4"
+num-traits = "0.2"
+num-derive = "0.4"
+nonblock = "0.2"
 
 [profile.dev]
 # We don't need stack unwinding in dev either - can be manually enabled
@@ -73,7 +42,3 @@ codegen-units = 1
 [package.metadata.cargo-all-features]
 skip_optional_dependencies = true
 
-[[bench]]
-name = "benchmark"
-harness = false
-required-features = ["sync", "async"]

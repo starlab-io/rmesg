@@ -97,7 +97,6 @@ impl Display for Entry {
 }
 
 /// Linux kmesg (kernel message buffer) Log Facility.
-#[cfg_attr(feature = "extra-traits", derive(Serialize, Deserialize))]
 #[derive(EnumString, Debug, PartialEq, Display, Copy, Clone, FromPrimitive)]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
