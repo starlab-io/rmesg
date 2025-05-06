@@ -216,9 +216,6 @@ pub fn entry_from_line(line: &str) -> Result<Entry, EntryParsingError> {
 #[cfg(all(test, target_os = "linux"))]
 mod test {
     use super::*;
-    #[cfg(feature = "async")]
-    use tokio_stream::StreamExt;
-
     #[test]
     fn test_kmsg() {
         let entries = kmsg(None);

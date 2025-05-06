@@ -6,9 +6,6 @@ use std::fmt::{Display, Error as FmtError, Formatter, Result as FmtResult, Write
 use std::time::Duration;
 use strum_macros::{Display, EnumString};
 
-#[cfg(feature = "extra-traits")]
-use serde::{Deserialize, Serialize};
-
 /// A parsed/structured entry from kernel log buffer
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entry {
@@ -137,7 +134,6 @@ pub enum LogFacility {
 }
 
 /// Linux kmesg (kernel message buffer) Log Level.
-#[cfg_attr(feature = "extra-traits", derive(Serialize, Deserialize))]
 #[derive(EnumString, Debug, PartialEq, Display, Copy, Clone, FromPrimitive)]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
