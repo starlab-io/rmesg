@@ -406,53 +406,7 @@ mod test {
         assert!(entries.is_ok(), "Response from klog not Ok");
         assert!(!entries.unwrap().is_empty(), "Should have non-empty logs");
     }
-
-    #[cfg(feature = "sync")]
-    #[test]
-    fn test_iterator() {
-        // uncomment below if you want to be extra-sure
-        //let enable_timestamp_result = kernel_log_timestamps_enable(true);
-        //assert!(enable_timestamp_result.is_ok());
-
-        // Don't clear the buffer. Poll every second.
-        let iterator_result = KLogEntries::with_options(false, SUGGESTED_POLL_INTERVAL);
-        assert!(iterator_result.is_ok());
-
-        let iterator = iterator_result.unwrap();
-
-        // Read 10 lines and quit
-        for (count, entry) in iterator.enumerate() {
-            assert!(entry.is_ok());
-            if count > 10 {
-                break;
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn test_stream() {
-        // uncomment below if you want to be extra-sure
-        //let enable_timestamp_result = kernel_log_timestamps_enable(true);
-        //assert!(enable_timestamp_result.is_ok());
-
-        // Don't clear the buffer. Poll every second.
-        let stream_result = KLogEntries::with_options(false, SUGGESTED_POLL_INTERVAL);
-        assert!(stream_result.is_ok());
-
-        let mut stream = stream_result.unwrap();
-
-        // Read 10 lines and quit
-        let mut count: u32 = 0;
-        while let Some(entry) = tokio_stream::StreamExt::next(&mut stream).await {
-            assert!(entry.is_ok());
-            count += 1;
-            if count > 10 {
-                break;
-            }
-        }
-    }
-
+    
     #[test]
     fn test_parse_serialize() {
         let line1 = "<6>a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15";

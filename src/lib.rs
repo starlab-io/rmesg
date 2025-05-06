@@ -7,7 +7,6 @@ pub mod klogctl;
 /// KMsg Implementation (reads from the /dev/kmsg file)
 pub mod kmsgfile;
 
-#[cfg(feature = "sync")]
 use std::iter::Iterator;
 
 #[derive(Clone, Copy, Debug)]
